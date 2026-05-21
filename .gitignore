@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+csi_env/
+__pycache__/
+*.pyc
+
+notebooks/heatmap.png
+realtime_debug.csv
+
+src/X_data.npy
+src/y_user.npy
+src/y_gesture.npy

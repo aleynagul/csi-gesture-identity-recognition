@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-DATA_DIR = "data"
+DATA_DIR = "../data"
 TIMESTEPS = 100   
 SUBCARRIERS = 64  
 def parse_csv_robustly(filepath, max_sc=SUBCARRIERS):
