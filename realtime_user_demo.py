@@ -8,10 +8,10 @@ from collections import Counter
 from tensorflow.keras.models import load_model
 
 
-PORT = "/dev/ttyUSB0"
+PORT = "/dev/ttyUSB1"
 BAUD = 115200
 
-WINDOW_SIZE = 35
+WINDOW_SIZE = 30
 SUBCARRIERS = 64
 
 
@@ -19,12 +19,12 @@ user_labels = [
     "aleyna",
     "damla",
     "deniz",
-    "derya"
+    "derya",
     "empty"
 ]
 
 model = load_model(
-    "models/MULTI_SESSION_MODEL.h5"
+    "models/MULTI_SESSION_MODEL_EMPTY_V3.h5"
 )
 
 print("MODEL YUKLENDI!")
@@ -93,6 +93,7 @@ while True:
         )
 
         values = parse_csi(line)
+        #print(line[:100])
 
         if values is None:
             continue
