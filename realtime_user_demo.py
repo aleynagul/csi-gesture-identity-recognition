@@ -1,3 +1,9 @@
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
+import warnings
+warnings.filterwarnings("ignore")
+
 import serial
 import numpy as np
 import time
@@ -8,12 +14,23 @@ from collections import Counter
 from tensorflow.keras.models import load_model
 
 
+# =========================
+# SETTINGS
+# =========================
+
 PORT = "/dev/ttyUSB1"
 BAUD = 115200
 
 WINDOW_SIZE = 30
 SUBCARRIERS = 64
 
+NORMAL_DURATION = 10
+EXIT_WAIT = 20
+
+
+# =========================
+# LABELS
+# =========================
 
 user_labels = [
     "aleyna",
@@ -23,13 +40,41 @@ user_labels = [
     "empty"
 ]
 
+
+# =========================
+# TEST STATES
+# =========================
+
+states = [
+    "NORMAL DUR",
+    "SAGA DON",
+    "SOLA DON",
+    "1 ADIM GERI GIT",
+    "1 ADIM YAKLAS",
+    "ODADAN CIK"
+]
+
+current_state_idx = 0
+state_start_time = time.time()
+
+exit_processed = False
+
+
+# =========================
+# MODEL LOAD
+# =========================
+
 model = load_model(
-    "models/MULTI_SESSION_MODEL_EMPTY_V3.h5"
+    "models/MULTI_SESSION_MODEL_EMPTY_V2.h5"
+
 )
 
 print("MODEL YUKLENDI!")
 
 
+# =========================
+# SERIAL START
+# =========================
 
 ser = serial.Serial(
     PORT,
@@ -39,11 +84,21 @@ ser = serial.Serial(
 
 print("CSI DINLENIYOR...")
 
+
+# =========================
+# BUFFERS
+# =========================
+
 buffer = deque(maxlen=WINDOW_SIZE)
 
 prediction_history = deque(maxlen=5)
 
 last_prediction_time = 0
+
+
+# =========================
+# CSI PARSER
+# =========================
 
 def parse_csi(line):
 
@@ -71,6 +126,10 @@ def parse_csi(line):
         return None
 
 
+# =========================
+# NORMALIZATION
+# =========================
+
 def normalize_sample(sample):
 
     sample_mean = np.mean(sample)
@@ -83,9 +142,116 @@ def normalize_sample(sample):
 
     return sample
 
+
+# =========================
+# CLEAR SCREEN
+# =========================
+
+def clear_screen():
+
+    os.system("clear")
+
+
+# =========================
+# SHOW STATE
+# =========================
+
+def show_state():
+
+    clear_screen()
+
+    print("="*50)
+    print("CSI REALTIME USER IDENTIFICATION")
+    print("="*50)
+
+    print(
+        f"\nTEST ADIMI [{current_state_idx+1}/{len(states)}]"
+    )
+
+    print(
+        f"YAPILACAK: {states[current_state_idx]}"
+    )
+
+    print("\n" + "="*50)
+
+
+# =========================
+# START SCREEN
+# =========================
+
+show_state()
+
+
+# =========================
+# REALTIME LOOP
+# =========================
+
 while True:
 
     try:
+
+        current_state = states[current_state_idx]
+
+
+        # =========================
+        # ODADAN CIK STATE
+        # =========================
+
+        if current_state == "ODADAN CIK" and not exit_processed:
+
+            clear_screen()
+
+            print("="*50)
+            print("ODADAN CIK")
+            print(f"{EXIT_WAIT} SANIYE BEKLENIYOR...")
+            print("="*50)
+
+            # inference pause
+            time.sleep(EXIT_WAIT)
+
+            # eski CSI temizleniyor
+            prediction_history.clear()
+            buffer.clear()
+
+            print("\nBUFFER TEMIZLENDI!")
+            print("CSI TEKRAR BASLADI!")
+
+            time.sleep(2)
+
+            exit_processed = True
+
+            state_start_time = time.time()
+
+            continue
+
+
+        # =========================
+        # NORMAL STATE TIMER
+        # =========================
+
+        if current_state != "ODADAN CIK":
+
+            elapsed = time.time() - state_start_time
+
+            if elapsed > NORMAL_DURATION:
+
+                current_state_idx += 1
+
+                if current_state_idx >= len(states):
+                    current_state_idx = len(states) - 1
+
+                state_start_time = time.time()
+
+                prediction_history.clear()
+
+                show_state()
+
+                continue
+
+
+        # =========================
+        # SERIAL READ
+        # =========================
 
         line = ser.readline().decode(
             "utf-8",
@@ -93,12 +259,16 @@ while True:
         )
 
         values = parse_csi(line)
-        #print(line[:100])
 
         if values is None:
             continue
 
         buffer.append(values)
+
+
+        # =========================
+        # PREDICTION
+        # =========================
 
         if len(buffer) == WINDOW_SIZE:
 
@@ -131,7 +301,12 @@ while True:
                 predicted_user
             )
 
-            if confidence < 0.85:
+
+            # =========================
+            # LOW CONFIDENCE
+            # =========================
+
+            if confidence < 0.93:
 
                 current_time = time.time()
 
@@ -151,6 +326,11 @@ while True:
                 )
 
                 print("="*40)
+
+
+            # =========================
+            # NORMAL RESULT
+            # =========================
 
             else:
 
@@ -188,12 +368,26 @@ while True:
                 )
 
                 print("="*40)
-            
+
+
+            # =========================
+            # EMPTY INFO
+            # =========================
+
             if predicted_user == "empty":
+
                 print("ODA BOŞ")
+
 
     except KeyboardInterrupt:
 
-        print("CIKILIYOR...")
+        print("\nCIKILIYOR...")
 
         break
+
+
+# =========================
+# CLOSE SERIAL
+# =========================
+
+ser.close()
