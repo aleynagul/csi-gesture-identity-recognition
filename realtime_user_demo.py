@@ -14,10 +14,6 @@ from collections import Counter
 from tensorflow.keras.models import load_model
 
 
-# =========================
-# SETTINGS
-# =========================
-
 PORT = "/dev/ttyUSB1"
 BAUD = 115200
 
@@ -28,22 +24,15 @@ NORMAL_DURATION = 10
 EXIT_WAIT = 20
 
 
-# =========================
-# LABELS
-# =========================
-
 user_labels = [
     "aleyna",
     "damla",
     "deniz",
     "derya",
-    "empty"
+    "empty",
+    "huseyin"
 ]
 
-
-# =========================
-# TEST STATES
-# =========================
 
 states = [
     "NORMAL DUR",
@@ -59,22 +48,12 @@ state_start_time = time.time()
 
 exit_processed = False
 
-
-# =========================
-# MODEL LOAD
-# =========================
-
 model = load_model(
     "models/MULTI_SESSION_MODEL_EMPTY_V2.h5"
-
 )
 
 print("MODEL YUKLENDI!")
 
-
-# =========================
-# SERIAL START
-# =========================
 
 ser = serial.Serial(
     PORT,
@@ -85,10 +64,6 @@ ser = serial.Serial(
 print("CSI DINLENIYOR...")
 
 
-# =========================
-# BUFFERS
-# =========================
-
 buffer = deque(maxlen=WINDOW_SIZE)
 
 prediction_history = deque(maxlen=5)
@@ -96,12 +71,9 @@ prediction_history = deque(maxlen=5)
 last_prediction_time = 0
 
 
-# =========================
-# CSI PARSER
-# =========================
-
 def parse_csi(line):
 
+    #print(line[:100])
     if "CSI:" not in line:
         return None
 
@@ -126,10 +98,6 @@ def parse_csi(line):
         return None
 
 
-# =========================
-# NORMALIZATION
-# =========================
-
 def normalize_sample(sample):
 
     sample_mean = np.mean(sample)
@@ -143,18 +111,10 @@ def normalize_sample(sample):
     return sample
 
 
-# =========================
-# CLEAR SCREEN
-# =========================
-
 def clear_screen():
 
     os.system("clear")
 
-
-# =========================
-# SHOW STATE
-# =========================
 
 def show_state():
 
@@ -174,28 +134,13 @@ def show_state():
 
     print("\n" + "="*50)
 
-
-# =========================
-# START SCREEN
-# =========================
-
 show_state()
-
-
-# =========================
-# REALTIME LOOP
-# =========================
 
 while True:
 
     try:
 
         current_state = states[current_state_idx]
-
-
-        # =========================
-        # ODADAN CIK STATE
-        # =========================
 
         if current_state == "ODADAN CIK" and not exit_processed:
 
@@ -206,10 +151,8 @@ while True:
             print(f"{EXIT_WAIT} SANIYE BEKLENIYOR...")
             print("="*50)
 
-            # inference pause
             time.sleep(EXIT_WAIT)
 
-            # eski CSI temizleniyor
             prediction_history.clear()
             buffer.clear()
 
@@ -223,11 +166,6 @@ while True:
             state_start_time = time.time()
 
             continue
-
-
-        # =========================
-        # NORMAL STATE TIMER
-        # =========================
 
         if current_state != "ODADAN CIK":
 
@@ -248,11 +186,6 @@ while True:
 
                 continue
 
-
-        # =========================
-        # SERIAL READ
-        # =========================
-
         line = ser.readline().decode(
             "utf-8",
             errors="ignore"
@@ -265,10 +198,6 @@ while True:
 
         buffer.append(values)
 
-
-        # =========================
-        # PREDICTION
-        # =========================
 
         if len(buffer) == WINDOW_SIZE:
 
@@ -295,6 +224,15 @@ while True:
 
             confidence = np.max(prediction)
 
+            sorted_probs = np.sort(
+                prediction[0]
+            )[::-1]
+
+            top1 = sorted_probs[0]
+            top2 = sorted_probs[1]
+
+            margin = top1 - top2
+
             predicted_user = user_labels[pred_class]
 
             prediction_history.append(
@@ -302,11 +240,7 @@ while True:
             )
 
 
-            # =========================
-            # LOW CONFIDENCE
-            # =========================
-
-            if confidence < 0.93:
+            if confidence < 0.90 or margin < 0.04:
 
                 current_time = time.time()
 
@@ -325,26 +259,25 @@ while True:
                     f"GUVEN DUSUK: %{confidence*100:.2f}"
                 )
 
+                print(
+                    f"MARGIN: %{margin*100:.2f}"
+                )
+
                 print("="*40)
-
-
-            # =========================
-            # NORMAL RESULT
-            # =========================
 
             else:
 
-                most_common = Counter(
-                    prediction_history
-                ).most_common(1)[0][0]
+                # most_common = Counter(
+                #     prediction_history
+                # ).most_common(1)[0][0]
 
-                same_count = prediction_history.count(
-                    most_common
-                )
+                # same_count = prediction_history.count(
+                #     most_common
+                # )
 
-                stability = (
-                    same_count / len(prediction_history)
-                ) * 100
+                # stability = (
+                #     same_count / len(prediction_history)
+                # ) * 100
 
                 current_time = time.time()
 
@@ -356,7 +289,7 @@ while True:
                 print("\n" + "="*40)
 
                 print(
-                    f"KULLANICI: {most_common.upper()}"
+                    f"KULLANICI: {predicted_user.upper()}"
                 )
 
                 print(
@@ -364,19 +297,18 @@ while True:
                 )
 
                 print(
-                    f"STABILITY: %{stability:.1f}"
+                    f"MARGIN: %{margin*100:.2f}"
                 )
+
+                # print(
+                #     f"STABILITY: %{stability:.1f}"
+                # )
 
                 print("="*40)
 
-
-            # =========================
-            # EMPTY INFO
-            # =========================
-
             if predicted_user == "empty":
 
-                print("ODA BOŞ")
+                print("ODA BOS")
 
 
     except KeyboardInterrupt:
@@ -384,10 +316,5 @@ while True:
         print("\nCIKILIYOR...")
 
         break
-
-
-# =========================
-# CLOSE SERIAL
-# =========================
 
 ser.close()
