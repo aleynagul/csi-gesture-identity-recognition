@@ -11,14 +11,14 @@ import pandas as pd
 import plotly.express as px
 import time
 
-from collections import deque
+from collections import deque, Counter
 from tensorflow.keras.models import load_model
 
 
-PORT = "/dev/ttyUSB1"
+PORT = "/dev/ttyUSB0"
 BAUD = 115200
 
-WINDOW_SIZE = 30
+WINDOW_SIZE = 100
 SUBCARRIERS = 64
 
 
@@ -45,7 +45,7 @@ st.title(" CSI Realtime User Identification")
 def load_csi_model():
 
     model = load_model(
-        "models/MULTI_SESSION_MODEL_EMPTY_V5.h5"
+        "models/MULTI_SESSION_MODEL_EMPTY_V6.h5"
     )
 
     return model
@@ -59,6 +59,7 @@ ser = serial.Serial(
 )
 
 buffer = deque(maxlen=WINDOW_SIZE)
+prediction_history = deque(maxlen=10)
 
 def parse_csi(line):
 
@@ -121,7 +122,15 @@ while True:
     if values is None:
         continue
 
-    buffer.append(values)
+    
+    #print(line)
+    print("ilk 10 değer ", values[:10])
+    print("Mean",np.mean(values))
+    print("Mestdan",np.std(values))
+    time.sleep(1)
+
+
+    buffer.append(values) 
 
     if len(buffer) == WINDOW_SIZE:
 
@@ -133,6 +142,17 @@ while True:
         sample = sample[:, :64]
 
         sample = normalize_sample(sample)
+        np.save(
+            "realtime_sample.npy",
+            sample
+        )
+
+        #print("\nRealtime sample stats")
+        #print("Shape:", sample.shape)
+        #print("Min:", np.min(sample))
+        #print("Max:", np.max(sample))
+        #print("Mean:", np.mean(sample))
+        #print("Std:", np.std(sample))
 
         sample_input = np.expand_dims(
             sample,
@@ -143,6 +163,8 @@ while True:
             sample_input,
             verbose=0
         )
+        print("\nPrediction:")
+        print(prediction[0])
 
         pred_class = np.argmax(prediction)
 
@@ -159,13 +181,34 @@ while True:
 
         predicted_user = user_labels[pred_class]
 
-        if confidence < 0.90 or margin < 0.04:
+        # Empty güçlü gelirse geçmişi sıfırla
+        if predicted_user == "empty" and confidence > 0.60:
 
-            final_user = "BELIRSIZ"
+            prediction_history.clear()
+            prediction_history.append("empty")
 
         else:
 
-            final_user = predicted_user.upper()
+            if confidence < 0.50 or margin < 0.03:
+
+                prediction_history.append("belirsiz")
+
+            else:
+
+                prediction_history.append(predicted_user)
+
+        # Son tahminleri oylama ile stabilize et
+        if len(prediction_history) >= 5:
+
+            final_user = Counter(
+                prediction_history
+            ).most_common(1)[0][0]
+
+        else:
+
+            final_user = "bekleniyor"
+
+        final_user = final_user.upper()
 
 
         user_placeholder.markdown(
