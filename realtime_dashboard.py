@@ -21,16 +21,9 @@ BAUD = 115200
 WINDOW_SIZE = 100
 SUBCARRIERS = 64
 
-
 user_labels = [
     "aleyna",
-    "damla",
-    "deniz",
-    "derya",
-    "empty",
-    "hilal",
-    "huseyin",
-    "zehra"
+    "empty"
 ]
 
 
@@ -45,7 +38,7 @@ st.title(" CSI Realtime User Identification")
 def load_csi_model():
 
     model = load_model(
-        "models/MULTI_SESSION_MODEL_EMPTY_V6.h5"
+        "models/ALEYNA_EMPTY_BALANCED.h5"
     )
 
     return model
@@ -59,7 +52,7 @@ ser = serial.Serial(
 )
 
 buffer = deque(maxlen=WINDOW_SIZE)
-prediction_history = deque(maxlen=10)
+prediction_history = deque(maxlen=15)
 
 def parse_csi(line):
 
@@ -124,10 +117,10 @@ while True:
 
     
     #print(line)
-    print("ilk 10 değer ", values[:10])
-    print("Mean",np.mean(values))
-    print("Mestdan",np.std(values))
-    time.sleep(1)
+    #print("ilk 10 değer ", values[:10])
+    #print("Mean",np.mean(values))
+    #print("Mestdan",np.std(values))
+    #time.sleep(1)
 
 
     buffer.append(values) 
@@ -141,7 +134,7 @@ while True:
 
         sample = sample[:, :64]
 
-        sample = normalize_sample(sample)
+        #sample = normalize_sample(sample)
         np.save(
             "realtime_sample.npy",
             sample
@@ -182,23 +175,22 @@ while True:
         predicted_user = user_labels[pred_class]
 
         # Empty güçlü gelirse geçmişi sıfırla
-        if predicted_user == "empty" and confidence > 0.60:
+        # UNKNOWN kontrolü
 
-            prediction_history.clear()
-            prediction_history.append("empty")
+        if confidence < 0.55:
+
+            prediction_history.append("unknown")
+
+        elif margin < 0.08:
+
+            prediction_history.append("unknown")
 
         else:
 
-            if confidence < 0.50 or margin < 0.03:
-
-                prediction_history.append("belirsiz")
-
-            else:
-
-                prediction_history.append(predicted_user)
+            prediction_history.append(predicted_user)
 
         # Son tahminleri oylama ile stabilize et
-        if len(prediction_history) >= 5:
+        if len(prediction_history) >= 7:
 
             final_user = Counter(
                 prediction_history
