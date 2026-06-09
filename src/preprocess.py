@@ -3,7 +3,7 @@ import numpy as np
 from scipy.signal import butter, filtfilt
 
 DATA_DIR = "../new_data"  
-TIMESTEPS = 200 
+TIMESTEPS = 100 
 SUBCARRIERS = 64
 
 def butter_lowpass_filter(data, cutoff=4, fs=40, order=4):
@@ -134,6 +134,6 @@ if __name__ == "__main__":
         print(f"Kullanıcı Etiket Boyutu (y_user)    : {y_user.shape}")
         print(f"Hareket Etiket Boyutu (y_gesture)  : {y_gesture.shape}")
 
-        np.save("X_new_identity_raw.npy", X)
-        np.save("y_user_new_identity_raw.npy", y_user)
-        np.save("y_gesture_new_identity_raw.npy", y_gesture)
+        np.save("X_identity_100.npy", X)
+        np.save("y_user_identity_100.npy", y_user)
+        np.save("y_gesture_identity_100.npy", y_gesture)
